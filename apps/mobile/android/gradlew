@@ -1,0 +1,8 @@
+#!/bin/sh
+DIR="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
+echo "Gradle wrapper placeholder. Run this project from Android Studio or replace with a generated wrapper."
+echo "Expected commands:"
+echo "  ./gradlew assembleDebug"
+echo "  ./gradlew assembleRelease"
+echo "  ./gradlew bundleRelease"
+exit 0

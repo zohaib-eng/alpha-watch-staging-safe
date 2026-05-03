@@ -1,0 +1,15 @@
+{
+  "name": "@alpha/worker",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/index.js",
+    "build": "node -e \"console.log('worker build ok')\"",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "bullmq": "^5.58.5",
+    "ioredis": "^5.8.1",
+    "viem": "^2.38.3"
+  }
+}

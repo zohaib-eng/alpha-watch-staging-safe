@@ -1,0 +1,19 @@
+{
+  "name": "@alpha/mobile",
+  "private": true,
+  "scripts": {
+    "build:web": "echo Build web shell before syncing Android",
+    "android:sync": "npx cap sync android",
+    "android:open": "npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.4.3",
+    "@capacitor/app": "^7.0.1",
+    "@capacitor/browser": "^7.0.1",
+    "@capacitor/core": "^7.4.3",
+    "@capacitor/preferences": "^7.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.4.3"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "name": "@alpha/web",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^15.5.15",
+    "next-auth": "5.0.0-beta.29",
+    "pg": "^8.11.3",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "@reown/appkit": "^1.8.2",
+    "@reown/appkit-adapter-solana": "^1.8.2",
+    "@solana/web3.js": "^1.95.0"
+  }
+}

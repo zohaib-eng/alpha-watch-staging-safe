@@ -1,0 +1,22 @@
+{
+  "name": "alpha-watch",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @alpha/web & npm run dev -w @alpha/worker",
+    "build": "npm run build -w @alpha/web && npm run build -w @alpha/worker",
+    "start": "npm run start -w @alpha/web",
+    "lint": "echo lint",
+    "android:sync": "npm run android:sync -w @alpha/mobile",
+    "android:open": "npm run android:open -w @alpha/mobile",
+    "android:build:debug": "cd apps/mobile/android && ./gradlew assembleDebug",
+    "android:build:release": "cd apps/mobile/android && ./gradlew assembleRelease",
+    "android:bundle:release": "cd apps/mobile/android && ./gradlew bundleRelease"
+  },
+  "dependencies": {
+    "undici": "^8.1.0"
+  }
+}

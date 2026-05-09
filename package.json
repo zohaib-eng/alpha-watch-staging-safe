@@ -9,6 +9,8 @@
     "dev": "npm run dev -w @alpha/web & npm run dev -w @alpha/worker",
     "build": "npm run build -w @alpha/web && npm run build -w @alpha/worker",
     "start": "npm run start -w @alpha/web",
+    "db:migrate": "node packages/db/migrate.js",
+    "test": "node --test tests/*.test.mjs",
     "lint": "echo lint",
     "android:sync": "npm run android:sync -w @alpha/mobile",
     "android:open": "npm run android:open -w @alpha/mobile",

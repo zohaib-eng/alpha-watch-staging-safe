@@ -11,12 +11,21 @@ const tabs = [
   { key: "logs", label: "Logs & Monitoring" }
 ];
 
-async function fetchData(endpoint, retries = 3) {
+function apiHeaders(role, extra = {}) {
+  return {
+    'Cache-Control': 'no-cache',
+    'x-alpha-role': role,
+    'x-alpha-actor': role,
+    ...extra
+  };
+}
+
+async function fetchData(endpoint, role = 'operator', retries = 3) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
       const res = await fetch(`/api/${endpoint}`, { 
         method: 'GET',
-        headers: { 'Cache-Control': 'no-cache' }
+        headers: apiHeaders(role)
       });
       
       if (!res.ok) {
@@ -179,10 +188,13 @@ export default function Page() {
   const [mounted, setMounted] = useState(false);
   const [highlightedIds, setHighlightedIds] = useState(new Set());
   const [config, setConfig] = useState({ executionMode: 'dry-run', tradingEnabled: false, mandatoryApprovals: true });
+  const [manualCandidateId, setManualCandidateId] = useState(null);
   const prevDataRef = useRef({});
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       // Fetch server config
@@ -202,13 +214,11 @@ export default function Page() {
       // Load all endpoints in parallel with better error handling
       const promises = Object.entries(endpoints).map(async ([key, endpoint]) => {
         try {
-          console.log(`Fetching ${endpoint}...`);
-          const data = await fetchData(endpoint);
+          const data = await fetchData(endpoint, role);
           results[key] = data || [];
-          console.log(`Success: ${key} loaded ${(data || []).length} items`);
           return { key, success: true };
         } catch (err) {
-          console.error(`Error loading ${key}:`, err.message);
+          if (!silent) console.error(`Error loading ${key}:`, err.message);
           results[key] = []; // Return empty array on error
           return { key, success: false, error: err.message };
         }
@@ -218,7 +228,7 @@ export default function Page() {
       const failedEndpoints = outcomes.filter(o => !o.success);
       
       if (failedEndpoints.length > 0) {
-        console.warn('Some endpoints failed:', failedEndpoints.map(o => o.key).join(', '));
+        if (!silent) console.warn('Some endpoints failed:', failedEndpoints.map(o => o.key).join(', '));
         // If all endpoints failed, set error
         if (failedEndpoints.length === outcomes.length) {
           setError('Unable to connect to API. Retrying...');
@@ -243,9 +253,11 @@ export default function Page() {
       prevDataRef.current = results;
       setData(results);
     } catch (err) {
-      setError(err.message);
+      if (!silent) setError(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   };
 
@@ -264,13 +276,8 @@ export default function Page() {
       });
     }, 100);
     
-    const interval = setInterval(() => {
-      loadData().catch(err => console.error('Refresh error:', err));
-    }, 3000);
-    
     return () => {
       clearTimeout(timer);
-      clearInterval(interval);
     };
   }, [mounted]);
 
@@ -301,8 +308,20 @@ export default function Page() {
         }
       });
     } else {
-      alert(`${action} for ${id}`);
-      // In real, call API to update DB
+      try {
+        const status = action === 'Approve' ? 'APPROVED' : 'REJECTED';
+        const res = await fetch('/api/approvals', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...apiHeaders(role) },
+          body: JSON.stringify({ approvalId: id, status })
+        });
+        const result = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(result.error || 'Failed to update approval');
+        alert(`${status}: ${id}`);
+        loadData();
+      } catch (error) {
+        alert(`Error: ${error.message}`);
+      }
     }
   };
 
@@ -310,7 +329,7 @@ export default function Page() {
     try {
       const res = await fetch('/api/candidates/watch', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...apiHeaders(role) },
         body: JSON.stringify({ candidateId, status: newStatus })
       });
       if (!res.ok) throw new Error('Failed to update watchlist');
@@ -318,6 +337,42 @@ export default function Page() {
       loadData(); // Refresh data
     } catch (err) {
       alert(`Error: ${err.message}`);
+    }
+  };
+
+  const startManualSwap = (candidateId) => {
+    setManualCandidateId(candidateId);
+    setActiveTab('trades');
+  };
+
+  const toggleAutoTrade = async (candidateId, enabled, mode = 'dry-run') => {
+    try {
+      const res = await fetch('/api/candidates/auto', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...apiHeaders(role) },
+        body: JSON.stringify({ candidateId, enabled, mode })
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || 'Failed to update auto swap');
+      loadData();
+    } catch (error) {
+      alert(`Error: ${error.message}`);
+    }
+  };
+
+  const runAutoSwapTests = async () => {
+    try {
+      const res = await fetch('/api/auto-swap/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...apiHeaders(role) },
+        body: JSON.stringify({})
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(result.error || 'Failed to queue auto swap tests');
+      alert(`Queued ${result.queued || 0} supervised ${result.executionMode} auto swap test(s)`);
+      loadData();
+    } catch (error) {
+      alert(`Error: ${error.message}`);
     }
   };
 
@@ -392,10 +447,20 @@ export default function Page() {
       case "watchlist":
         return (
           <section style={{background:"#0f172a",padding:20,borderRadius:20,border:"1px solid #1e293b",overflowX:"auto"}}>
-            <h2 style={{marginTop:0}}>Watchlist</h2>
+            <div style={{display:"flex",justifyContent:"space-between",gap:12,alignItems:"center",marginBottom:12}}>
+              <h2 style={{margin:0}}>Watchlist</h2>
+              {role === 'admin' && (
+                <button
+                  onClick={runAutoSwapTests}
+                  style={{padding:"8px 12px",background:"#1d4ed8",color:"white",border:"none",borderRadius:8,cursor:"pointer"}}
+                >
+                  Run Auto Tests
+                </button>
+              )}
+            </div>
             <Table 
               data={data.watchlist?.filter(c => c.status === 'WATCH')} 
-              columns={["Token", "Chain", "Venue", "Score", "Liquidity_USD", "Action"]} 
+              columns={["Token", "Chain", "Venue", "Score", "Liquidity_USD", "Manual", "Auto", "Action"]} 
               emptyMessage="No items in watchlist." 
               renderRow={(row, i) => {
                 const isHighlighted = highlightedIds.has(`watchlist-${i}`);
@@ -406,6 +471,37 @@ export default function Page() {
                     <td>{row.venue}</td>
                     <td style={{fontWeight: isHighlighted ? 'bold' : 'normal', color: isHighlighted ? '#22c55e' : '#e2e8f0'}}>{row.score}</td>
                     <td>{row.liquidity_usd || '-'}</td>
+                    <td>
+                      <button
+                        onClick={() => startManualSwap(row.id)}
+                        style={{padding:"4px 8px", background:"#2563eb", color:"white", border:"none", borderRadius:4, cursor:"pointer"}}
+                      >
+                        Manual Swap
+                      </button>
+                    </td>
+                    <td>
+                      {role === 'admin' ? (
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(row.auto_trade_enabled)}
+                            onChange={(event) => toggleAutoTrade(row.id, event.target.checked, row.auto_trade_mode || 'dry-run')}
+                          />
+                          <select
+                            value={row.auto_trade_mode || 'dry-run'}
+                            onChange={(event) => toggleAutoTrade(row.id, Boolean(row.auto_trade_enabled), event.target.value)}
+                            style={{background:"#0f172a",color:"white",border:"1px solid #334155",borderRadius:4,padding:"4px"}}
+                          >
+                            <option value="dry-run">dry-run</option>
+                            <option value="shadow-order">shadow</option>
+                          </select>
+                        </div>
+                      ) : (
+                        <span style={{color: row.auto_trade_enabled ? "#22c55e" : "#94a3b8"}}>
+                          {row.auto_trade_enabled ? row.auto_trade_mode || 'dry-run' : 'Off'}
+                        </span>
+                      )}
+                    </td>
                     <td>
                       {role === 'admin' && (
                         <button 
@@ -418,7 +514,7 @@ export default function Page() {
                     </td>
                   </tr>,
                   <tr key={`${i}-warning`}>
-                    <td colSpan="6" style={{padding:0, border:"none"}}>
+                    <td colSpan="8" style={{padding:0, border:"none"}}>
                       <RiskWarning riskLevel={getRiskLevel(row.score)} details={`Liquidity: $${row.liquidity_usd || 0}`} />
                     </td>
                   </tr>
@@ -467,6 +563,8 @@ export default function Page() {
             role={role}
             getRiskLevel={getRiskLevel}
             onExecuteTrade={loadData}
+            initialCandidateId={manualCandidateId}
+            onInitialCandidateHandled={() => setManualCandidateId(null)}
           />
         );
       case "logs":

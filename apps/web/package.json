@@ -1,6 +1,7 @@
 {
   "name": "@alpha/web",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -14,6 +15,9 @@
     "react-dom": "^19.2.0",
     "@reown/appkit": "^1.8.2",
     "@reown/appkit-adapter-solana": "^1.8.2",
-    "@solana/web3.js": "^1.95.0"
+    "@solana/web3.js": "^1.95.0",
+    "bullmq": "^5.58.5",
+    "ioredis": "^5.8.1",
+    "viem": "^2.38.3"
   }
 }

@@ -11,7 +11,9 @@ export function requireApproval(candidate, amountUsd) {
 
 export function enforceRisk(candidate, amountUsd) {
   if ((candidate.score || 0) < 75) throw new Error("Score below execution floor");
-  if ((candidate.liquidityUsd || 0) < 250000) throw new Error("Insufficient liquidity");
-  if ((candidate.arbGapPct || 0) > 15) throw new Error("Suspicious arb gap");
-  if (amountUsd > (candidate.liquidityUsd || 0) * 0.01) throw new Error("Size too large for pool");
+  const liquidityUsd = candidate.liquidityUsd ?? candidate.liquidity_usd ?? 0;
+  const arbGapPct = candidate.arbGapPct ?? candidate.arb_gap_pct ?? 0;
+  if (Number(liquidityUsd) < 250000) throw new Error("Insufficient liquidity");
+  if (Number(arbGapPct) > 15) throw new Error("Suspicious arb gap");
+  if (amountUsd > Number(liquidityUsd) * 0.01) throw new Error("Size too large for pool");
 }

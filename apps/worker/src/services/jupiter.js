@@ -1,4 +1,4 @@
-const base = process.env.JUPITER_SWAP_BASE_URL || "https://api.jup.ag/swap/v2";
+const base = process.env.JUPITER_SWAP_BASE_URL || "https://lite-api.jup.ag/swap/v1";
 const priceBase = "https://price.jup.ag/v4";
 
 export async function jupiterPrice(params) {
@@ -14,15 +14,19 @@ export async function jupiterPrice(params) {
 }
 
 export async function jupiterOrder(body) {
-  const res = await fetch(`${base}/order`, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(process.env.JUPITER_API_KEY ? { "x-api-key": process.env.JUPITER_API_KEY } : {})
-    },
-    body: JSON.stringify(body)
+  const url = new URL(`${base}/quote`);
+  Object.entries(body).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && key !== "taker") url.searchParams.set(key, String(value));
   });
-  if (!res.ok) throw new Error(`Jupiter order failed: ${res.status}`);
+
+  const res = await fetch(url.toString(), {
+    method: "GET",
+    headers: {
+      "accept": "application/json",
+      ...(process.env.JUPITER_API_KEY ? { "x-api-key": process.env.JUPITER_API_KEY } : {})
+    }
+  });
+  if (!res.ok) throw new Error(`Jupiter quote failed: ${res.status}`);
   return res.json();
 }
 

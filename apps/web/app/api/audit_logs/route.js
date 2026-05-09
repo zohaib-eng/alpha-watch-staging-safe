@@ -1,16 +1,15 @@
-import pkg from 'pg';
-const { Client } = pkg;
+import { requireOperator } from '../_lib/auth';
+import { withDb } from '../_lib/db';
 
-export async function GET() {
-  const client = new Client({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/alphawatch'
-  });
+export async function GET(request) {
+  const { response } = requireOperator(request);
+  if (response) return response;
 
   try {
-    await client.connect();
-    const res = await client.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 50');
-    await client.end();
-    return Response.json(res.rows);
+    return await withDb(async client => {
+      const res = await client.query('SELECT * FROM audit_logs ORDER BY created_at DESC LIMIT 100');
+      return Response.json(res.rows);
+    });
   } catch (error) {
     console.error('DB Error:', error);
     return Response.json({ error: 'Failed to fetch audit logs' }, { status: 500 });

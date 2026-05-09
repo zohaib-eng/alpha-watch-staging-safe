@@ -1,78 +1,62 @@
-import pkg from 'pg';
-const { Client } = pkg;
+export const runtime = 'nodejs';
+
 import { Connection, VersionedTransaction } from '@solana/web3.js';
+import { requireOperator } from '../../_lib/auth';
+import { withDb } from '../../_lib/db';
+import { writeAudit } from '../../_lib/audit';
+import { ensureTradeAllowed, getExecutionMode } from '../../_lib/risk';
 
 export async function POST(request) {
-  const { candidateId, signedTransaction, wallet } = await request.json();
-
-  if (!candidateId || !signedTransaction || !wallet) {
-    return Response.json(
-      { error: 'candidateId, signedTransaction, and wallet required' },
-      { status: 400 }
-    );
-  }
-
-  const client = new Client({
-    connectionString: process.env.DATABASE_URL || 'postgresql://postgres:postgres@localhost:5432/alphawatch'
-  });
+  const { actor, response } = requireOperator(request);
+  if (response) return response;
 
   try {
-    await client.connect();
+    const { candidateId, signedTransaction, wallet } = await request.json();
 
-    // Fetch candidate
-    const candidateRes = await client.query('SELECT * FROM candidates WHERE id = $1', [candidateId]);
-    const candidate = candidateRes.rows[0];
-    if (!candidate) {
-      await client.end();
-      return Response.json({ error: 'Candidate not found' }, { status: 404 });
+    if (!candidateId || !signedTransaction || !wallet) {
+      return Response.json(
+        { error: 'candidateId, signedTransaction, and wallet required' },
+        { status: 400 }
+      );
     }
 
-    // Get execution mode
-    const executionMode = process.env.EXECUTION_MODE || 'dry-run';
-    console.log(`Execution mode: ${executionMode}`);
+    return await withDb(async client => {
+      const candidateRes = await client.query('SELECT * FROM candidates WHERE id = $1', [candidateId]);
+      const candidate = candidateRes.rows[0];
+      if (!candidate) {
+        return Response.json({ error: 'Candidate not found' }, { status: 404 });
+      }
 
-    let result;
-    let txHash = null;
+      const approval = await ensureTradeAllowed(client, candidate, wallet);
+      if (!approval) {
+        return Response.json({ error: 'Approved trade approval is required' }, { status: 403 });
+      }
 
-    if (executionMode === 'dry-run') {
-      // Dry-run mode: just validate and return
-      result = {
-        mode: 'dry-run',
-        message: 'Transaction would execute but dry-run is enabled',
-        simulatedTxHash: `0x${'simulated'.padEnd(64, '0')}`
-      };
-      console.log('Dry-run mode: transaction not submitted');
-    } else if (executionMode === 'shadow-order') {
-      // Shadow mode: simulate execution
-      result = {
-        mode: 'shadow-order',
-        message: 'Transaction simulated (shadow order)',
-        wouldExecute: true,
-        simulatedTxHash: `0x${'shadow'.padEnd(64, '0')}`
-      };
-      console.log('Shadow-order mode: transaction simulated');
-    } else if (executionMode === 'live') {
-      // LIVE mode: actually submit to blockchain
-      try {
+      const executionMode = getExecutionMode();
+      let result;
+      let txHash = null;
+
+      if (executionMode === 'dry-run') {
+        result = {
+          mode: 'dry-run',
+          message: 'Transaction validated but dry-run is enabled',
+          simulatedTxHash: `0x${'simulated'.padEnd(64, '0')}`
+        };
+      } else if (executionMode === 'shadow-order') {
+        result = {
+          mode: 'shadow-order',
+          message: 'Transaction simulated as a shadow order',
+          wouldExecute: true,
+          simulatedTxHash: `0x${'shadow'.padEnd(64, '0')}`
+        };
+      } else if (executionMode === 'live') {
         const connection = new Connection(
           process.env.SOLANA_RPC_URL || 'https://api.mainnet-beta.solana.com',
           'confirmed'
         );
-
-        // Deserialize signed transaction
         const txBuffer = Buffer.from(signedTransaction, 'base64');
         const tx = VersionedTransaction.deserialize(txBuffer);
-
-        console.log('Submitting transaction to Solana blockchain...');
-
-        // Send transaction
-        const signature = await connection.sendTransaction(tx, {
-          preflightCommitment: 'confirmed'
-        });
-
-        console.log(`Transaction submitted: ${signature}`);
-
-        // Wait for confirmation
+        const signature = await connection.sendTransaction(tx, { preflightCommitment: 'confirmed' });
         const confirmation = await connection.confirmTransaction(signature, 'confirmed');
 
         if (confirmation.value.err) {
@@ -87,28 +71,18 @@ export async function POST(request) {
           confirmed: true,
           explorerUrl: `https://solscan.io/tx/${signature}`
         };
-
-        console.log(`✅ Trade executed live: ${signature}`);
-      } catch (blockchainError) {
-        console.error('Blockchain submission error:', blockchainError);
-        result = {
-          mode: 'live',
-          error: blockchainError.message,
-          message: 'Failed to submit transaction'
-        };
+      } else {
+        return Response.json({ error: `Unsupported EXECUTION_MODE: ${executionMode}` }, { status: 400 });
       }
-    }
 
-    // Log to audit_logs
-    await client.query(
-      'INSERT INTO audit_logs (type, actor, message, metadata) VALUES ($1, $2, $3, $4)',
-      [
-        txHash ? 'TRADE_EXECUTED_LIVE' : `TRADE_${executionMode.toUpperCase()}`,
-        wallet,
-        `Trade execution ${executionMode}: candidate ${candidateId}`,
-        {
+      await writeAudit(client, {
+        type: txHash ? 'TRADE_EXECUTED_LIVE' : `TRADE_${executionMode.toUpperCase()}`,
+        actor: actor.id,
+        message: `Trade execution ${executionMode}: candidate ${candidateId}`,
+        metadata: {
           candidateId,
           wallet,
+          approvalId: approval.id,
           executionMode,
           txHash: txHash || result.simulatedTxHash,
           candidate: {
@@ -118,14 +92,12 @@ export async function POST(request) {
             score: candidate.score
           }
         }
-      ]
-    );
+      });
 
-    await client.end();
-    return Response.json(result);
+      return Response.json(result);
+    });
   } catch (error) {
     console.error('Trade execution error:', error);
-    await client.end();
     return Response.json(
       { error: 'Failed to execute trade: ' + error.message },
       { status: 500 }

@@ -62,6 +62,7 @@ export function getActor(request) {
   const adminAllowlist = splitEnv('ADMIN_WALLETS');
   const operatorAllowlist = splitEnv('OPERATOR_WALLETS');
   const isProduction = process.env.NODE_ENV === 'production';
+  const allowUnlistedOperators = process.env.ALLOW_UNLISTED_OPERATORS === 'true';
   const localFallbackAllowed = !isProduction && adminAllowlist.length === 0 && operatorAllowlist.length === 0;
   const walletKey = effectiveWallet?.toLowerCase();
   const actorAllowedAsAdmin = walletKey && adminAllowlist.includes(walletKey);
@@ -69,12 +70,14 @@ export function getActor(request) {
     actorAllowedAsAdmin ||
     (walletKey && operatorAllowlist.includes(walletKey)) ||
     Boolean(session) ||
+    allowUnlistedOperators ||
     localFallbackAllowed;
 
   return {
     id: actor,
     wallet: effectiveWallet,
     role: actorAllowedAsAdmin || (localFallbackAllowed && requestedRole === 'admin') ? 'admin' : 'operator',
+    allowUnlistedOperators,
     localFallbackAllowed,
     isAllowed: actorAllowedAsOperator
   };
@@ -85,7 +88,13 @@ export function requireOperator(request) {
   if (!actor.isAllowed) {
     return {
       actor,
-      response: Response.json({ error: 'Operator is not allowlisted' }, { status: 403 })
+      response: Response.json(
+        {
+          error: 'Operator is not allowlisted',
+          detail: 'Set OPERATOR_WALLETS/ADMIN_WALLETS to the connected wallet, sign in with a wallet session, or set ALLOW_UNLISTED_OPERATORS=true for staging/demo read access.'
+        },
+        { status: 403 }
+      )
     };
   }
   return { actor };

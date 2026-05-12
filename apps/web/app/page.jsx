@@ -12,10 +12,15 @@ const tabs = [
 ];
 
 function apiHeaders(role, extra = {}) {
+  const storedWallet = typeof window !== 'undefined' ? window.localStorage.getItem('alphaWallet') : null;
+  const storedToken = typeof window !== 'undefined' ? window.localStorage.getItem('alphaSessionToken') : null;
+
   return {
     'Cache-Control': 'no-cache',
     'x-alpha-role': role,
-    'x-alpha-actor': role,
+    'x-alpha-actor': storedWallet || role,
+    ...(storedWallet ? { 'x-alpha-wallet': storedWallet } : {}),
+    ...(storedToken ? { Authorization: `Bearer ${storedToken}` } : {}),
     ...extra
   };
 }

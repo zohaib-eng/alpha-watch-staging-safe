@@ -31,6 +31,7 @@ export function TradesTab({ data, role, getRiskLevel, onExecuteTrade, initialCan
         if (publicKey) {
           const address = typeof publicKey === 'string' ? publicKey : publicKey.toString()
           setWalletAddress(address)
+          window.localStorage.setItem('alphaWallet', address)
           setWalletConnected(true)
         }
       } catch {
@@ -42,12 +43,16 @@ export function TradesTab({ data, role, getRiskLevel, onExecuteTrade, initialCan
 
     if (typeof window !== 'undefined' && window.solana?.on) {
       window.solana.on('connect', publicKey => {
-        setWalletAddress(publicKey.toString())
+        const address = publicKey.toString()
+        setWalletAddress(address)
+        window.localStorage.setItem('alphaWallet', address)
         setWalletConnected(true)
       })
       window.solana.on('disconnect', () => {
         setWalletConnected(false)
         setWalletAddress(null)
+        window.localStorage.removeItem('alphaWallet')
+        window.localStorage.removeItem('alphaSessionToken')
       })
     }
   }, [])
@@ -91,7 +96,9 @@ export function TradesTab({ data, role, getRiskLevel, onExecuteTrade, initialCan
 
     try {
       if (window.solana.isConnected && window.solana.publicKey) {
-        setWalletAddress(window.solana.publicKey.toString())
+        const address = window.solana.publicKey.toString()
+        setWalletAddress(address)
+        window.localStorage.setItem('alphaWallet', address)
         setWalletConnected(true)
         return
       }
@@ -100,7 +107,9 @@ export function TradesTab({ data, role, getRiskLevel, onExecuteTrade, initialCan
       const publicKey = result?.publicKey || window.solana.publicKey
       if (!publicKey) throw new Error('Failed to get public key from wallet')
 
-      setWalletAddress(publicKey.toString ? publicKey.toString() : publicKey)
+      const address = publicKey.toString ? publicKey.toString() : publicKey
+      setWalletAddress(address)
+      window.localStorage.setItem('alphaWallet', address)
       setWalletConnected(true)
       setTradeNotice({
         type: 'success',
@@ -128,6 +137,8 @@ export function TradesTab({ data, role, getRiskLevel, onExecuteTrade, initialCan
     } finally {
       setWalletConnected(false)
       setWalletAddress(null)
+      window.localStorage.removeItem('alphaWallet')
+      window.localStorage.removeItem('alphaSessionToken')
       setSelectedCandidate(null)
     }
   }

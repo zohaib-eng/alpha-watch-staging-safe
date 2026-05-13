@@ -194,6 +194,8 @@ export default function Page() {
   const [highlightedIds, setHighlightedIds] = useState(new Set());
   const [config, setConfig] = useState({ executionMode: 'dry-run', tradingEnabled: false, mandatoryApprovals: true });
   const [manualCandidateId, setManualCandidateId] = useState(null);
+  const [authWallet, setAuthWallet] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
   const prevDataRef = useRef({});
 
   const loadData = async ({ silent = false } = {}) => {
@@ -272,6 +274,30 @@ export default function Page() {
 
   useEffect(() => {
     if (!mounted) return;
+
+    const storedWallet = window.localStorage.getItem('alphaWallet');
+    if (storedWallet) {
+      setAuthWallet(storedWallet);
+      setAuthReady(true);
+      return;
+    }
+
+    const wallet = window.solana?.publicKey?.toString?.();
+    if (wallet) {
+      window.localStorage.setItem('alphaWallet', wallet);
+      setAuthWallet(wallet);
+    }
+    setAuthReady(true);
+  }, [mounted]);
+
+  useEffect(() => {
+    if (!mounted || !authReady) return;
+
+    if (!authWallet) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
     
     // Small delay to ensure APIs are ready
     const timer = setTimeout(() => {
@@ -284,7 +310,7 @@ export default function Page() {
     return () => {
       clearTimeout(timer);
     };
-  }, [mounted]);
+  }, [mounted, authReady, authWallet, role]);
 
   const handleAction = async (action, id, riskLevel = 'low') => {
     if (action === 'Execute Trade') {
@@ -602,6 +628,27 @@ export default function Page() {
 
       {!mounted ? (
         <p style={{color:"#94a3b8", textAlign:"center", padding:40}}>Initializing...</p>
+      ) : authReady && !authWallet ? (
+        <section style={{background:"#0f172a",padding:24,borderRadius:12,border:"1px solid #1e293b",maxWidth:520}}>
+          <h2 style={{marginTop:0}}>Wallet Required</h2>
+          <p style={{color:"#94a3b8"}}>
+            Connect Phantom Wallet from the Trades tab or reconnect your wallet, then refresh. Production APIs require an allowlisted wallet.
+          </p>
+          <button
+            onClick={() => {
+              const wallet = window.solana?.publicKey?.toString?.();
+              if (wallet) {
+                window.localStorage.setItem('alphaWallet', wallet);
+                setAuthWallet(wallet);
+              } else {
+                setActiveTab('trades');
+              }
+            }}
+            style={{padding:"10px 14px",background:"#1d4ed8",color:"white",border:"none",borderRadius:8,cursor:"pointer"}}
+          >
+            Check Wallet
+          </button>
+        </section>
       ) : (
         <>
           <div style={{marginBottom:20}}>

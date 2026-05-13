@@ -1,11 +1,8 @@
-import { requireAdmin, requireOperator } from '../_lib/auth';
+import { getActor, requireAdmin } from '../_lib/auth';
 import { makeId, withDb } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
 
-export async function GET(request) {
-  const { response } = requireOperator(request);
-  if (response) return response;
-
+export async function GET() {
   try {
     return await withDb(async client => {
       const res = await client.query('SELECT * FROM approvals ORDER BY created_at DESC');
@@ -18,8 +15,7 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
-  const { actor, response } = requireOperator(request);
-  if (response) return response;
+  const actor = getActor(request);
 
   try {
     const { candidateId, wallet, reason = 'Trade approval requested', metadata = {} } = await request.json();

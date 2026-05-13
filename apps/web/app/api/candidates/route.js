@@ -1,11 +1,8 @@
-import { requireAdmin, requireOperator } from '../_lib/auth';
+import { requireAdmin } from '../_lib/auth';
 import { withDb } from '../_lib/db';
 import { writeAudit } from '../_lib/audit';
 
-export async function GET(request) {
-  const { response } = requireOperator(request);
-  if (response) return response;
-
+export async function GET() {
   try {
     return await withDb(async client => {
       const res = await client.query('SELECT * FROM candidates ORDER BY score DESC LIMIT 50');
